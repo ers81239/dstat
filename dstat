@@ -486,7 +486,8 @@ class dstat:
         ret = ''
         if isinstance(self.name, types.StringType):
             if simple:
-                ret = ",".join(['"{nick}"'.format(nick=nick) for nick in self.vars])
+                
+                ret = ",".join(['"{name}:{nick}"'.format(name=self.name, nick=nick) for nick in self.nick])
             else:
                 ret = ",".join(['"{nick}"'.format(nick=nick) for nick in self.nick])
                 
