@@ -20,6 +20,7 @@ from __future__ import generators
 try:
     import sys, os, time, sched, re, getopt, fnmatch
     import types, resource, getpass, glob, linecache
+    from itertools import  product
 except KeyboardInterrupt:
     pass
 
@@ -90,6 +91,7 @@ class Options:
         self.update = True
         self.header = True
         self.output = False
+        self.simpleoutput = False
         self.pidfile = False
         self.profile = ''
 
@@ -117,7 +119,7 @@ class Options:
                 ['all', 'all-plugins', 'bits', 'bw', 'blackonwhite', 'debug',
                  'filesystem', 'float', 'full', 'help', 'integer',
                  'list', 'mods', 'modules', 'nocolor', 'noheaders', 'noupdate',
-                 'output=', 'pidfile=', 'profile', 'version', 'vmstat'] + allplugins)
+                 'output=', 'simpleoutput', 'pidfile=', 'profile', 'version', 'vmstat'] + allplugins)
         except getopt.error, exc:
             print 'dstat: %s, try dstat -h for a list of all the options' % str(exc)
             sys.exit(1)
@@ -199,6 +201,8 @@ class Options:
                 self.update = False
             elif opt in ['-o', '--output']:
                 self.output = arg
+            elif opt in ['--simpleoutput']:
+                self.simpleoutput = True
             elif opt in ['--pidfile']:
                 self.pidfile = arg
             elif opt in ['--profile']:
@@ -319,6 +323,7 @@ Dstat options:
   --noheaders            disable repetitive headers
   --noupdate             disable intermediate updates
   --output file          write CSV output to file
+  --simpleoutput         simplifies CSV output (single header line, better column names)
 
 delay is the delay in seconds between each update (default: 1)
 count is the number of updates to display before exiting (default: unlimited)
@@ -464,34 +469,30 @@ class dstat:
                 if i + 1 != len(self.name): ret = ret + theme['frame'] + char['colon']
             return ret
 
-    def csvtitle(self):
-        if isinstance(self.name, types.StringType):
-            return '"' + self.name + '"' + ',' * (len(self.nick) - 1)
+    def csvtitle(self, simple=False):
+        if simple:
+            return None
         else:
-            ret = ''
-            for i, name in enumerate(self.name):
-                ret = ret + '"' + name + '"' + ',' * (len(self.nick) - 1)
-                if i + 1 != len(self.name): ret = ret + ','
-            return ret
+            if isinstance(self.name, types.StringType):
+                return '"' + self.name + '"' + ',' * (len(self.nick) - 1)
+            else:
+                ret = ''
+                for i, name in enumerate(self.name):
+                    ret = ret + '"' + name + '"' + ',' * (len(self.nick) - 1)
+                    if i + 1 != len(self.name): ret = ret + ','
+                return ret
 
-    def csvsubtitle(self):
+    def csvsubtitle(self, simple=False):
         ret = ''
         if isinstance(self.name, types.StringType):
-            for i, nick in enumerate(self.nick):
-                ret = ret + '"' + nick + '"'
-                if i + 1 != len(self.nick): ret = ret + ','
-        elif len(self.name) == 1:
-            for i, name in enumerate(self.name):
-                for j, nick in enumerate(self.nick):
-                    ret = ret + '"' + nick + '"'
-                    if j + 1 != len(self.nick): ret = ret + ','
-                if i + 1 != len(self.name): ret = ret + ','
+            if simple:
+                ret = ",".join(['"{nick}"'.format(nick=nick) for nick in self.vars])
+            else:
+                ret = ",".join(['"{nick}"'.format(nick=nick) for nick in self.nick])
+                
         else:
-            for i, name in enumerate(self.name):
-                for j, nick in enumerate(self.nick):
-                    ret = ret + '"' + name + ':' + nick + '"'
-                    if j + 1 != len(self.nick): ret = ret + ','
-                if i + 1 != len(self.name): ret = ret + ','
+            #self.name can be an iterable?
+            ret = ",".join(['"{name}:{nick}"'.format(name=name, nick=nick) for nick, name in product(self.name, self.nick)])
         return ret
 
     def check(self):
@@ -2071,21 +2072,16 @@ def header(totlist, vislist):
             line += theme['title'] + char['gt']
     return line + '\n'
 
-def csvheader(totlist):
+def csvheader(totlist, simple=False):
     "Return the CVS header for a set of module counters"
-    line = ''
-    ### Process title
-    for o in totlist:
-        line = line + o.csvtitle()
-        if o is not totlist[-1]:
-            line = line + ','
-    line += '\n'
-    ### Process subtitle
-    for o in totlist:
-        line = line + o.csvsubtitle()
-        if o is not totlist[-1]:
-            line = line + ','
-    return line + '\n'
+    if simple:
+        return ','.join([o.csvsubtitle(simple=True) for o in totlist])
+    else:
+        ### Process title
+        line1 = ','.join([o.csvtitle() for o in totlist])
+        ### Process subtitle
+        line2 = ','.join([o.csvsubtitle() for o in totlist])
+        return '\n'.join([line1, line2, ""]) #The "" gets us a trailing newline
 
 def info(level, str):
     "Output info message"
@@ -2404,14 +2400,20 @@ def main():
     if op.output:
         if os.path.exists(op.output):
             outputfile = open(op.output, 'a', 0)
-            outputfile.write('\n\n')
+            outputfile_existed = True
+            if op.simpleoutput==False:
+                outputfile.write('\n\n')
         else:
             outputfile = open(op.output, 'w', 0)
-            outputfile.write('"Dstat %s CSV output"\n' % VERSION)
-            outputfile.write('"Author:","Dag Wieers <dag@wieers.com>",,,,"URL:","http://dag.wieers.com/home-made/dstat/"\n')
-
-        outputfile.write('"Host:","%s",,,,"User:","%s"\n' % (hostname, user))
-        outputfile.write('"Cmdline:","dstat %s",,,,"Date:","%s"\n\n' % (' '.join(op.args), time.strftime('%d %b %Y %H:%M:%S %Z', time.localtime())))
+            outputfile_existed = False
+            if not op.simpleoutput:
+                outputfile.write('"Dstat %s CSV output"\n' % VERSION)
+                outputfile.write('"Author:","Dag Wieers <dag@wieers.com>",,,,"URL:","http://dag.wieers.com/home-made/dstat/"\n')
+            
+        if op.simpleoutput == False:    
+            outputfile.write('"Host:","%s",,,,"User:","%s"\n' % (hostname, user))
+            outputfile.write('"Cmdline:","dstat %s",,,,"Date:","%s"\n\n' % (' '.join(op.args), time.strftime('%d %b %Y %H:%M:%S %Z', time.localtime())))
+            
 
     ### Create pidfile
     if op.pidfile:
@@ -2510,7 +2512,10 @@ def main():
         die(8, 'None of the stats you selected are available.')
 
     if op.output:
-        outputfile.write(csvheader(totlist))
+        if outputfile_existed and (op.header==False or op.simpleoutput==True):
+            pass
+        else:
+            outputfile.write(csvheader(totlist, simple=op.simpleoutput))
 
     scheduler = sched.scheduler(time.time, time.sleep)
     inittime = time.time()
