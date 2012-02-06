@@ -2168,8 +2168,8 @@ def getnamebypid(pid, name):
         if '\0' in cmdline:
             cmdline=cmdline.split('\0')  #man proc tells me there should be nulls in here
         else:
-            cmdline=cmdline.split() #but on my ubuntu 11.10, there are spaces instead.
-        
+            cmdline=cmdline.split() #but sometimes it seems like spaces (esp google chrome) 
+
         ret = basename(cmdline[0])
         if ret in ('bash', 'csh', 'ksh', 'perl', 'python', 'ruby', 'sh'):
             ret = basename(cmdline[1])
