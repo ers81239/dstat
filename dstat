@@ -16,8 +16,11 @@
 ### Copyright 2004-2010 Dag Wieers <dag@wieers.com>
 
 from __future__ import generators
-from fluent import sender
-from fluent import event
+try:
+    from fluent import sender
+    from fluent import event
+except ImportError:
+    fluent = None
 
 try:
     import sys, os, time, sched, re, getopt, fnmatch
@@ -25,7 +28,7 @@ try:
 except KeyboardInterrupt:
     pass
 
-VERSION = '0.7.2svn'
+VERSION = '0.7.2td'
 
 theme = { 'default': '' }
 
@@ -203,7 +206,10 @@ class Options:
             elif opt in ['-o', '--output']:
                 self.output = arg
             elif opt in ['--fluentd']:
-                self.fluentd = True
+                if fluent:
+                    self.fluentd = True
+                else:
+                    sys.exit('ImportError: No module named fluent')
             elif opt in ['--pidfile']:
                 self.pidfile = arg
             elif opt in ['--profile']:
