@@ -4,7 +4,7 @@
 
 Summary: Pluggable real-time performance monitoring tool
 Name: dstat
-Version: 0.7.2svn
+Version: 0.7.2td
 Release: 1
 License: GPL
 Group: System Environment/Base
